@@ -387,37 +387,37 @@ def check_nearest_inc(board, x, y):
     except IndexError:
         pass
     return n
-def check_nearest(board, info, safe, x, y, func):
+def check_nearest(board, info, safe, unvisited,  x, y, func):
     try:
-        func(board, info, safe, x, y + 1)
+        func(board, info, safe, unvisited,  x, y + 1)
     except IndexError:
         pass
     try:
-        func(board, info, safe, x, y - 1)
+        func(board, info, safe, unvisited,  x, y - 1)
     except IndexError:
         pass
     try:
-        func(board, info, safe, x - 1, y + 1)
+        func(board, info, safe, unvisited,  x - 1, y + 1)
     except IndexError:
         pass
     try:
-        func(board, info, safe, x - 1, y - 1)
+        func(board, info, safe, unvisited,  x - 1, y - 1)
     except IndexError:
         pass
     try:
-        func(board, info, safe, x - 1, y)
+        func(board, info, safe, unvisited,  x - 1, y)
     except IndexError:
         pass
     try:
-        func(board, info, safe, x + 1, y + 1)
+        func(board, info, safe, unvisited,  x + 1, y + 1)
     except IndexError:
         pass
     try:
-        func(board, info, safe, x + 1, y - 1)
+        func(board, info, safe, unvisited,  x + 1, y - 1)
     except IndexError:
         pass
     try:
-        func(board, info, safe, x + 1, y)
+        func(board, info, safe, unvisited,  x + 1, y)
     except IndexError:
         pass
 def neighborsAreMines(board, info, safe, x, y):
@@ -427,7 +427,21 @@ def neighborsAreSafe(board, info, safe, x, y):
     if info[x][y].isSafe == 0:
         info[x][y].isSafe == 1
         safe.append((x, y))
-
+def print_info(info):
+    print("printing info")
+    for i in info:
+        for j in i:
+            if j.isSafe == 0:
+                print(". ", end="")
+            elif j.isSafe == -1:
+                print("M ", end="")
+            else:
+                print(str(j.neighbor_safe) + " ", end="")
+            # j is a Query
+            # if status is unknown, print period
+            # if is mine, print M
+            # else print surrounding_mines
+        print()
 def basic_agent(board):
     # initialize info
     # info is a list of list of Query
@@ -437,7 +451,7 @@ def basic_agent(board):
         for j in range(len(board)):
             r.append(Query(0, 0, 0, 0, 8))
         info.append(r)
-    print(info)
+    print_info(info)
 
     # list of tripped mines
     tripped = []
@@ -448,36 +462,52 @@ def basic_agent(board):
             unvisited.append((i, j))
 
     visited = []
+
+    # safe is the queue containing all coordinates known to be safe
+    # if it becomes empty, it will be populated by a random space not known to be a mine
     safe = []
     print(unvisited)
     while len(unvisited) > 0:
-        coord = unvisited[random.randint(0, len(unvisited) - 1)]
+        # randomly pick a coordinate and append to safe
+        while True:
+            coord = unvisited[random.randint(0, len(unvisited) - 1)]
+            # if coord known to be a mine, reset the random coordinate
+            if info[coord[0]][coord[1]].isSafe != -1:
+                break
+        print(str(coord) + " randomly chosen")
         safe.append(coord)
-        print(safe)
+        #print(safe)
         while len(safe) > 0:
+            print(safe)
             c = safe.pop()
             x = c[0]
             y = c[1]
 
-            # query cell
-            unvisited.remove(coord)
-            visited.append(coord)
-            if board[x][y] == -1:
-                tripped.append(coord)
-                info[x][y].isSafe = -1
-            else:
-                info[x][y].isSafe = 1
+            # query the cell
+            query_cell_basic(board, info, coord, safe, visited, unvisited, tripped)
 
-            # update cell info and append newly safe
-            update_cell_info(board, info, safe, x, y)
-            check_nearest(board, info, safe, x, y, update_cell_info)
-            print(tripped)
+            print("tripped is " + str(tripped))
             
-
+def query_cell_basic(board, info, coord, safe, visited, unvisited, tripped):
+    unvisited.remove(coord)
+    visited.append(coord)
+    x = coord[0]
+    y = coord[1]
+    if board[x][y] == -1:
+        print("mine hit!")
+        tripped.append(coord)
+        info[x][y].isSafe = -1
+    else:
+        info[x][y].isSafe = 1
+    print_info(info)
+    # update cell info and append newly safe
+    update_cell_info(board, info, safe, unvisited, x, y)
+    check_nearest(board, info, safe, unvisited, x, y, update_cell_info)
 # resets the information for a cell and checks all its neighbors once more to update the information
 # returns the unqueried spaces next to it that are known to be safe
-def update_cell_info(board, info, safe, x, y):
+def update_cell_info(board, info, safe, unvisited, x, y):
     q = info[x][y]
+    print("updating info on (" + str(x) + ", " + str(y) + ")")
     neighbors = 8
     if x == 0 or x == len(board) - 1:
         if y == 0 or y == len(board) - 1:
@@ -489,6 +519,8 @@ def update_cell_info(board, info, safe, x, y):
             neighbors = 3
         else:
             neighbors = 5
+
+    print("there are " + str(neighbors) + " neighbors")
     qunq = []
 
     q.neighbor_unqueried = 0
@@ -498,14 +530,15 @@ def update_cell_info(board, info, safe, x, y):
     # if neighbor is a mine/safe, increase number for q
     # if neighbor is unqueried, add to qunq list for possible safe append
     try:
-        neighbor = info[x][y - 1]
-        if neighbor.isSafe == -1:
-            q.neighbor_mine += 1
-        elif neighbor.isSafe == 1:
-            q.neighbor_safe += 1
-        else:
-            q.neighbor_unqueried += 1
-            qunq.append((x, y - 1))
+        if y != 0:
+            neighbor = info[x][y - 1]
+            if neighbor.isSafe == -1:
+                q.neighbor_mine += 1
+            elif neighbor.isSafe == 1:
+                q.neighbor_safe += 1
+            else:
+                q.neighbor_unqueried += 1
+                qunq.append((x, y - 1))
     except IndexError:
         pass
     try:
@@ -520,47 +553,51 @@ def update_cell_info(board, info, safe, x, y):
     except IndexError:
         pass
     try:
-        neighbor = info[x - 1][y - 1]
-        if neighbor.isSafe == -1:
-            q.neighbor_mine += 1
-        elif neighbor.isSafe == 1:
-            q.neighbor_safe += 1
-        else:
-            q.neighbor_unqueried += 1
-            qunq.append((x - 1, y - 1))
+        if x != 0 and y != 0:
+            neighbor = info[x - 1][y - 1]
+            if neighbor.isSafe == -1:
+                q.neighbor_mine += 1
+            elif neighbor.isSafe == 1:
+                q.neighbor_safe += 1
+            else:
+                q.neighbor_unqueried += 1
+                qunq.append((x - 1, y - 1))
     except IndexError:
         pass
     try:
-        neighbor = info[x - 1][y + 1]
-        if neighbor.isSafe == -1:
-            q.neighbor_mine += 1
-        elif neighbor.isSafe == 1:
-            q.neighbor_safe += 1
-        else:
-            q.neighbor_unqueried += 1
-            qunq.append((x - 1, y + 1))
+        if x != 0:
+            neighbor = info[x - 1][y + 1]
+            if neighbor.isSafe == -1:
+                q.neighbor_mine += 1
+            elif neighbor.isSafe == 1:
+                q.neighbor_safe += 1
+            else:
+                q.neighbor_unqueried += 1
+                qunq.append((x - 1, y + 1))
     except IndexError:
         pass
     try:
-        neighbor = info[x - 1][y]
-        if neighbor.isSafe == -1:
-            q.neighbor_mine += 1
-        elif neighbor.isSafe == 1:
-            q.neighbor_safe += 1
-        else:
-            q.neighbor_unqueried += 1
-            qunq.append((x - 1, y))
+        if x != 0:
+            neighbor = info[x - 1][y]
+            if neighbor.isSafe == -1:
+                q.neighbor_mine += 1
+            elif neighbor.isSafe == 1:
+                q.neighbor_safe += 1
+            else:
+                q.neighbor_unqueried += 1
+                qunq.append((x - 1, y))
     except IndexError:
         pass
     try:
-        neighbor = info[x + 1][y - 1]
-        if neighbor.isSafe == -1:
-            q.neighbor_mine += 1
-        elif neighbor.isSafe == 1:
-            q.neighbor_safe += 1
-        else:
-            q.neighbor_unqueried += 1
-            qunq.append((x + 1, y - 1))
+        if y != 0:
+            neighbor = info[x + 1][y - 1]
+            if neighbor.isSafe == -1:
+                q.neighbor_mine += 1
+            elif neighbor.isSafe == 1:
+                q.neighbor_safe += 1
+            else:
+                q.neighbor_unqueried += 1
+                qunq.append((x + 1, y - 1))
     except IndexError:
         pass
     try:
@@ -585,18 +622,25 @@ def update_cell_info(board, info, safe, x, y):
             qunq.append((x + 1, y))
     except IndexError:
         pass
-    
+    print("qunq is " + str(qunq))
     # change unqueried neighbors if you know for sure that they're all safe/mines
     # additionally, if unqueried are safe, append for search
+    # and if unqueried are mines, remove from unvisited (as we don't want to search them)
     if q.neighbor_unqueried == board[x][y]:
+        print("oops, all mines")
         for u in qunq:
             info[u[0]][u[1]].isSafe = -1
+            if u in unvisited:
+                unvisited.remove(u)
     elif q.neighbor_unqueried + q.neighbor_safe + board[x][y] == neighbors:
+        print("yay, all safe")
         for u in qunq:
             info[u[0]][u[1]].isSafe = 1
-            safe.append(u)
-
-board = board_gen(6, 4)
+            if u in unvisited:
+                safe.append(u)
+            #print("safe is now " + str(safe))
+    print_info(info)
+board = board_gen(6, 2)
 print_board(board)
 basic_agent(board)
 
